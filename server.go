@@ -14,7 +14,7 @@ const (
 	CONN_PORT = ":3333"
 	CONN_TYPE = "tcp"
 
-	CMD_PREFIX = "/"
+	CMD_PREFIX = "!"
 	CMD_CREATE = CMD_PREFIX + "create"
 	CMD_LIST   = CMD_PREFIX + "list"
 	CMD_JOIN   = CMD_PREFIX + "join"
@@ -93,42 +93,43 @@ func (lobby *Lobby) Parse(message *Message) {
 		fmt.Printf("%s", message)
 		if message.Client.chatRoom == nil {
 			serverMessage := NewMessage(time.Now(), serverClient, "Please join a chat room to send messages.")
-			message.Client.outgoing <- serverMessage
+			message.Client.outgoing <- serverMessage.String()
 			return
 		}
-		message.Client.chatRoom.Broadcast(message)
+		message.Client.chatRoom.Broadcast(message.String())
 	case strings.HasPrefix(message.Text, CMD_CREATE):
 		name := strings.TrimSuffix(strings.TrimPrefix(message.Text, CMD_CREATE + " "), "\n")
 		fmt.Printf("Requested to create chat \"%s\"\n", name)
 		err := lobby.AddChatRoom(NewChatRoom(name))
 		if err != nil {
 			serverMessage := NewMessage(time.Now(), serverClient, err.Error())
-			message.Client.outgoing <- serverMessage
+			message.Client.outgoing <- serverMessage.String()
 			return
 		}
 		serverMessage := NewMessage(time.Now(), serverClient, "Created chat room.")
-		message.Client.outgoing <- serverMessage
+		message.Client.outgoing <- serverMessage.String()
 	case strings.HasPrefix(message.Text, CMD_LIST):
 		fmt.Print("Requested to list chat rooms\n")
+		lobby.ListChatRooms(message.Client)
 	case strings.HasPrefix(message.Text, CMD_JOIN):
 		name := strings.TrimSuffix(strings.TrimPrefix(message.Text, CMD_JOIN + " "), "\n")
 		err := lobby.JoinChatRoom(message.Client, name)
 		if err != nil {
 			serverMessage := NewMessage(time.Now(), serverClient, err.Error())
-			message.Client.outgoing <- serverMessage
+			message.Client.outgoing <- serverMessage.String()
 			return
 		}
 		serverMessage := NewMessage(time.Now(), serverClient, "Joined chat room.")
-		message.Client.outgoing <- serverMessage
+		message.Client.outgoing <- serverMessage.String()
 	case strings.HasPrefix(message.Text, CMD_LEAVE):
 		err := lobby.LeaveChatRoom(message.Client)
 		if err != nil {
 			serverMessage := NewMessage(time.Now(), serverClient, err.Error())
-			message.Client.outgoing <- serverMessage
+			message.Client.outgoing <- serverMessage.String()
 			return
 		}
 		serverMessage := NewMessage(time.Now(), serverClient, "Left chat room")
-		message.Client.outgoing <- serverMessage
+		message.Client.outgoing <- serverMessage.String()
 	case strings.HasPrefix(message.Text, CMD_NAME):
 		name := strings.TrimSuffix(strings.TrimPrefix(message.Text, CMD_NAME + " "), "\n")
 		// serverMessage := NewMessage(time.Now(), serverClient, fmt.Sprintf("\"%s\" changed their name to \"%s\".", message.Client.name, name))
@@ -184,10 +185,17 @@ func (lobby *Lobby) LeaveChatRoom(client *Client) error {
 	return nil
 }
 
+func (lobby *Lobby) ListChatRooms(client *Client) {
+	client.outgoing <- fmt.Sprintf("Channels:\n")
+	for name := range lobby.chatRooms {
+		client.outgoing <- fmt.Sprintf("\"%s\"\n", name)
+	}
+}
+
 type ChatRoom struct {
 	name     string
 	clients  []*Client
-	messages []*Message
+	messages []string
 	expiry   time.Time
 }
 
@@ -195,7 +203,7 @@ func NewChatRoom(name string) *ChatRoom {
 	chatRoom := &ChatRoom {
 		name:     name,
 		clients:  make([]*Client, 0),
-		messages: make([]*Message, 0),
+		messages: make([]string, 0),
 		expiry:   time.Now().AddDate(0, 0, 7),
 	}
 	return chatRoom
@@ -223,8 +231,8 @@ func (chatRoom *ChatRoom) Leave(client *Client) {
 }
 
 // Sends the given message to all Clients currently in the ChatRoom.
-func (chatRoom *ChatRoom) Broadcast(message *Message) {
-	chatRoom.expiry = message.Time
+func (chatRoom *ChatRoom) Broadcast(message string) {
+	chatRoom.expiry = time.Now()
 	chatRoom.messages = append(chatRoom.messages, message)
 	for _, client := range chatRoom.clients {
 		client.outgoing <- message
@@ -242,7 +250,7 @@ type Client struct {
 	name     string
 	chatRoom *ChatRoom
 	incoming chan *Message
-	outgoing chan *Message
+	outgoing chan string
 	reader   *bufio.Reader
 	writer   *bufio.Writer
 }
@@ -257,7 +265,7 @@ func NewClient(conn net.Conn) *Client {
 		name: CLIENT_NAME,
 		chatRoom: nil,
 		incoming: make(chan *Message),
-		outgoing: make(chan *Message),
+		outgoing: make(chan string),
 		reader: reader,
 		writer: writer,
 	}
@@ -285,8 +293,8 @@ func (client *Client) Read() {
 // Reads in messages from the Client's outgoing channel, and writes them to the
 // Client's socket.
 func (client *Client) Write() {
-	for message := range client.outgoing {
-		client.writer.WriteString(message.String())
+	for str := range client.outgoing {
+		client.writer.WriteString(str)
 		client.writer.Flush()
 	}
 }
