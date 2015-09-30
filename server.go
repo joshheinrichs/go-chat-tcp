@@ -24,6 +24,12 @@ const (
 
 	CLIENT_NAME = "Anonymous"
 	SERVER_NAME = "Server"
+
+	ERROR_PREFIX = "Error: "
+	ERROR_SEND   = ERORR_PREFIX + "You cannot send messages in the lobby"
+	ERROR_CREATE = ERROR_PREFIX + "A chat room with that name already exists."
+	ERROR_JOIN   = ERROR_PREFIX + "A chat room with that name does not exist."
+	ERROR_LEAVE  = ERROR_PREFIX + "You cannot leave the lobby."
 )
 
 var lobby *Lobby
@@ -92,7 +98,7 @@ func (lobby *Lobby) Parse(message *Message) {
 	default:
 		fmt.Printf("%s", message)
 		if message.Client.chatRoom == nil {
-			serverMessage := NewMessage(time.Now(), serverClient, "Please join a chat room to send messages.")
+			serverMessage := NewMessage(time.Now(), serverClient, ERROR_SEND)
 			message.Client.outgoing <- serverMessage.String()
 			return
 		}
@@ -102,8 +108,7 @@ func (lobby *Lobby) Parse(message *Message) {
 		fmt.Printf("Requested to create chat \"%s\"\n", name)
 		err := lobby.AddChatRoom(NewChatRoom(name))
 		if err != nil {
-			serverMessage := NewMessage(time.Now(), serverClient, err.Error())
-			message.Client.outgoing <- serverMessage.String()
+			message.Client.outgoing <- err.Error()
 			return
 		}
 		serverMessage := NewMessage(time.Now(), serverClient, "Created chat room.")
@@ -115,8 +120,7 @@ func (lobby *Lobby) Parse(message *Message) {
 		name := strings.TrimSuffix(strings.TrimPrefix(message.Text, CMD_JOIN + " "), "\n")
 		err := lobby.JoinChatRoom(message.Client, name)
 		if err != nil {
-			serverMessage := NewMessage(time.Now(), serverClient, err.Error())
-			message.Client.outgoing <- serverMessage.String()
+			message.Client.outgoing <- err.Error()
 			return
 		}
 		serverMessage := NewMessage(time.Now(), serverClient, "Joined chat room.")
@@ -124,8 +128,7 @@ func (lobby *Lobby) Parse(message *Message) {
 	case strings.HasPrefix(message.Text, CMD_LEAVE):
 		err := lobby.LeaveChatRoom(message.Client)
 		if err != nil {
-			serverMessage := NewMessage(time.Now(), serverClient, err.Error())
-			message.Client.outgoing <- serverMessage.String()
+			message.Client.outgoing <- err.Error()
 			return
 		}
 		serverMessage := NewMessage(time.Now(), serverClient, "Left chat room")
@@ -142,7 +145,7 @@ func (lobby *Lobby) Parse(message *Message) {
 
 func (lobby *Lobby) AddChatRoom(chatRoom *ChatRoom) error {
 	if lobby.chatRooms[chatRoom.name] != nil {
-		return errors.New("A chat room with that name already exists")
+		return errors.New(ERROR_CREATE)
 	}
 	lobby.chatRooms[chatRoom.name] = chatRoom
 	go func() {
@@ -165,7 +168,7 @@ func (lobby *Lobby) RemoveChatRoom(chatRoom *ChatRoom) {
 
 func (lobby *Lobby) JoinChatRoom(client *Client, name string) error {
 	if lobby.chatRooms[name] == nil {
-		return errors.New("A chat room with that name does not exist")
+		return errors.New(ERROR_JOIN)
 	}
 	if client.chatRoom != nil {
 		err := lobby.LeaveChatRoom(client)
@@ -179,7 +182,7 @@ func (lobby *Lobby) JoinChatRoom(client *Client, name string) error {
 
 func (lobby *Lobby) LeaveChatRoom(client *Client) error {
 	if client.chatRoom == nil {
-		return errors.New("You cannot leave the lobby")
+		return errors.New(ERROR_LEAVE)
 	}
 	client.chatRoom.Leave(client)
 	return nil
@@ -324,7 +327,7 @@ func main() {
 	// Listen for incoming connections.
 	ln, err := net.Listen(CONN_TYPE, CONN_PORT)
 	if err != nil {
-		fmt.Println("Error listening:", err.Error())
+		fmt.Println("Error listening: ", err.Error())
 		os.Exit(1)
 	}
 		// Close the listener when the application closes.
