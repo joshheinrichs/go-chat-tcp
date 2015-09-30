@@ -14,7 +14,7 @@ const (
 	CONN_PORT = ":3333"
 	CONN_TYPE = "tcp"
 
-	CMD_PREFIX = "!"
+	CMD_PREFIX = "/"
 	CMD_CREATE = CMD_PREFIX + "create"
 	CMD_LIST   = CMD_PREFIX + "list"
 	CMD_JOIN   = CMD_PREFIX + "join"
