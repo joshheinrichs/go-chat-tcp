@@ -32,7 +32,6 @@ const (
 	ERROR_LEAVE  = ERROR_PREFIX + "You cannot leave the lobby."
 )
 
-var lobby *Lobby
 var serverClient *Client = &Client {
 	name:     SERVER_NAME,
 	incoming: nil,
@@ -322,7 +321,7 @@ func (message *Message) String() string {
 }
 
 func main() {
-	lobby = NewLobby()
+	lobby := NewLobby()
 
 	// Listen for incoming connections.
 	ln, err := net.Listen(CONN_TYPE, CONN_PORT)
