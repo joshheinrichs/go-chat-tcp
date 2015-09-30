@@ -1,4 +1,4 @@
-# golang-tcp-chat
+# go-chat-tcp
 
 A simple chat client and server written in Go, implemented using TCP sockets.
 
