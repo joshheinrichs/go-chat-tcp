@@ -36,9 +36,10 @@ const (
 	NOTICE_ROOM_LEAVE  = NOTICE_PREFIX + "\"%s\" left the chat room.\n"
 	NOTICE_ROOM_NAME   = NOTICE_PREFIX + "\"%s\" changed their name to \"%s\".\n"
 	NOTICE_ROOM_DELETE = NOTICE_PREFIX + "Chat room is inactive and being deleted.\n"
-	NOTICE_PERSONAL_CREATE = NOTICE_PREFIX + "Created chat room \"%s\".\n"
-	NOTICE_PERSONAL_NAME   = NOTICE_PREFIX + "Changed name to \"\"\n"
+	NOTICE_PERSONAL_CREATE  = NOTICE_PREFIX + "Created chat room \"%s\".\n"
+	NOTICE_PERSONAL_NAME    = NOTICE_PREFIX + "Changed name to \"\".\n"
 
+	MSG_CONNECT = "Welcome to the server! Type \"/help\" to get a list of commands.\n"
 
 	EXPIRY_TIME time.Duration = 7 * 24 * time.Hour 
 )
@@ -84,6 +85,7 @@ func (lobby *Lobby) Listen() {
 
 func (lobby *Lobby) Join(client *Client) {
 	lobby.clients = append(lobby.clients, client)
+	client.outgoing <- MSG_CONNECT
 	go func() {
 		for {
 			message, ok := <-client.incoming
@@ -106,7 +108,6 @@ func (lobby *Lobby) Leave(client *Client) {
 			break
 		}
 	}
-	fmt.Println("later...")
 }
 
 func (lobby *Lobby) Parse(message *Message) {
