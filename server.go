@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 	"bufio"
+	"log"
 )
 
 const (
@@ -92,14 +93,10 @@ func (lobby *Lobby) Join(client *Client) {
 	lobby.clients = append(lobby.clients, client)
 	client.outgoing <- MSG_CONNECT
 	go func() {
-		for {
-			message, ok := <-client.incoming
-			if !ok {
-				lobby.leave <- client
-				break
-			}
+		for message := range client.incoming {
 			lobby.incoming <- message
-		} 
+		}
+		lobby.leave <- client
 	}()
 }
 
@@ -114,6 +111,7 @@ func (lobby *Lobby) Leave(client *Client) {
 			break
 		}
 	}
+	close(client.outgoing)
 }
 
 // Checks if the a channel has expired. If it has, the chat room is deleted. 
