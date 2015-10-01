@@ -44,12 +44,12 @@ const (
 )
 
 type Lobby struct {
-	clients     []*Client
-	chatRooms   map[string]*ChatRoom
-	incoming    chan *Message
-	join        chan *Client
-	leave       chan *Client
-	delete      chan *ChatRoom
+	clients   []*Client
+	chatRooms map[string]*ChatRoom
+	incoming  chan *Message
+	join      chan *Client
+	leave     chan *Client
+	delete    chan *ChatRoom
 }
 
 func NewLobby() *Lobby {
