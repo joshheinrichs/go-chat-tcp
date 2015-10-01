@@ -348,7 +348,7 @@ func (client *Client) Read() {
 	for {
 		str, err := client.reader.ReadString('\n')
 		if err != nil {
-			fmt.Println(err)
+			log.Println(err)
 			break
 		}
 		message := NewMessage(time.Now(), client, strings.TrimSuffix(str, "\n"))
@@ -362,12 +362,12 @@ func (client *Client) Write() {
 	for str := range client.outgoing {
 		_, err := client.writer.WriteString(str)
 		if err != nil {
-			fmt.Println(err)
+			log.Println(err)
 			break
 		}
 		err = client.writer.Flush()
 		if err != nil {
-			fmt.Println(err)
+			log.Println(err)
 			break
 		}
 	}
@@ -407,20 +407,22 @@ func (message *Message) String() string {
 // Creates a lobby, listens for client connections, and connects them to the
 // lobby.
 func main() {
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
+
 	lobby := NewLobby()
 
 	listener, err := net.Listen(CONN_TYPE, CONN_PORT)
 	if err != nil {
-		fmt.Println("Error listening: ", err.Error())
+		log.Println("Error: ", err)
 		os.Exit(1)
 	}
 	defer listener.Close()
-	fmt.Println("Listening on " + CONN_PORT)
+	log.Println("Listening on " + CONN_PORT)
 
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			fmt.Println("Error accepting: ", err.Error())
+			log.Println("Error: ", err)
 			continue
 		}
 		go lobby.Join(NewClient(conn))
