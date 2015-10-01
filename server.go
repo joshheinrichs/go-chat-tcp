@@ -26,7 +26,7 @@ const (
 	SERVER_NAME = "Server"
 
 	ERROR_PREFIX = "Error: "
-	ERROR_SEND   = ERORR_PREFIX + "You cannot send messages in the lobby"
+	ERROR_SEND   = ERROR_PREFIX + "You cannot send messages in the lobby"
 	ERROR_CREATE = ERROR_PREFIX + "A chat room with that name already exists."
 	ERROR_JOIN   = ERROR_PREFIX + "A chat room with that name does not exist."
 	ERROR_LEAVE  = ERROR_PREFIX + "You cannot leave the lobby."
@@ -105,7 +105,7 @@ func (lobby *Lobby) Parse(message *Message) {
 	case strings.HasPrefix(message.Text, CMD_CREATE):
 		name := strings.TrimSuffix(strings.TrimPrefix(message.Text, CMD_CREATE + " "), "\n")
 		fmt.Printf("Requested to create chat \"%s\"\n", name)
-		err := lobby.AddChatRoom(NewChatRoom(name))
+		err := lobby.CreateChatRoom(NewChatRoom(name))
 		if err != nil {
 			message.Client.outgoing <- err.Error()
 			return
@@ -142,7 +142,7 @@ func (lobby *Lobby) Parse(message *Message) {
 	}
 }
 
-func (lobby *Lobby) AddChatRoom(chatRoom *ChatRoom) error {
+func (lobby *Lobby) CreateChatRoom(chatRoom *ChatRoom) error {
 	if lobby.chatRooms[chatRoom.name] != nil {
 		return errors.New(ERROR_CREATE)
 	}
