@@ -205,9 +205,9 @@ func (lobby *Lobby) ChangeName(client *Client, name string) {
 
 func (lobby *Lobby) ListChatRooms(client *Client) {
 	client.outgoing <- "\n"
-	client.outgoing <- "Channels:\n"
+	client.outgoing <- "Chat Rooms:\n"
 	for name := range lobby.chatRooms {
-		client.outgoing <- fmt.Sprintf("\"%s\"\n", name)
+		client.outgoing <- fmt.Sprintf("%s\n", name)
 	}
 	client.outgoing <- "\n"
 }
