@@ -43,14 +43,6 @@ const (
 	EXPIRY_TIME time.Duration = 7 * 24 * time.Hour 
 )
 
-var serverClient *Client = &Client {
-	name:     SERVER_NAME,
-	incoming: nil,
-	outgoing: nil,
-	reader:   nil,
-	writer:   nil,
-}
-
 type Lobby struct {
 	clients     []*Client
 	chatRooms   map[string]*ChatRoom
