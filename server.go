@@ -36,14 +36,16 @@ const (
 	NOTICE_ROOM_LEAVE  = NOTICE_PREFIX + "\"%s\" left the chat room.\n"
 	NOTICE_ROOM_NAME   = NOTICE_PREFIX + "\"%s\" changed their name to \"%s\".\n"
 	NOTICE_ROOM_DELETE = NOTICE_PREFIX + "Chat room is inactive and being deleted.\n"
-	NOTICE_PERSONAL_CREATE  = NOTICE_PREFIX + "Created chat room \"%s\".\n"
-	NOTICE_PERSONAL_NAME    = NOTICE_PREFIX + "Changed name to \"\".\n"
+	NOTICE_PERSONAL_CREATE = NOTICE_PREFIX + "Created chat room \"%s\".\n"
+	NOTICE_PERSONAL_NAME   = NOTICE_PREFIX + "Changed name to \"\".\n"
 
 	MSG_CONNECT = "Welcome to the server! Type \"/help\" to get a list of commands.\n"
 
 	EXPIRY_TIME time.Duration = 7 * 24 * time.Hour 
 )
 
+// A Lobby receives messages on its channels, and keeps track of the currently
+// connected clients, and currently created chat rooms. 
 type Lobby struct {
 	clients   []*Client
 	chatRooms map[string]*ChatRoom
@@ -53,6 +55,7 @@ type Lobby struct {
 	delete    chan *ChatRoom
 }
 
+// Creates a lobby which beings listening over its channels.
 func NewLobby() *Lobby {
 	lobby := &Lobby {
 		clients:   make([]*Client, 0),
@@ -66,6 +69,7 @@ func NewLobby() *Lobby {
 	return lobby
 }
 
+// Starts a new thread which listens over the Lobby's various channels.
 func (lobby *Lobby) Listen() {
 	go func() {
 		for {
@@ -83,6 +87,7 @@ func (lobby *Lobby) Listen() {
 	}()
 }
 
+// Handles clients connecting to the lobby
 func (lobby *Lobby) Join(client *Client) {
 	lobby.clients = append(lobby.clients, client)
 	client.outgoing <- MSG_CONNECT
@@ -98,6 +103,7 @@ func (lobby *Lobby) Join(client *Client) {
 	}()
 }
 
+// Handles clients disconnecting from the lobby.
 func (lobby *Lobby) Leave(client *Client) {
 	if client.chatRoom != nil {
 		client.chatRoom.Leave(client)
@@ -110,6 +116,23 @@ func (lobby *Lobby) Leave(client *Client) {
 	}
 }
 
+// Checks if the a channel has expired. If it has, the chat room is deleted. 
+// Otherwise, a signal is sent to the delete channel at its new expiry time.
+func (lobby *Lobby) DeleteChatRoom(chatRoom *ChatRoom) {
+	if chatRoom.expiry.After(time.Now()) {
+		go func() {
+			time.Sleep(chatRoom.expiry.Sub(time.Now()))
+			lobby.delete <- chatRoom
+		}()
+	} else {
+		chatRoom.Delete()
+		delete(lobby.chatRooms, chatRoom.name)
+	}
+}
+
+// Handles messages sent to the lobby. If the message contains a command, the
+// command is executed by the lobby. Otherwise, the message is sent to the
+// sender's current chat room.
 func (lobby *Lobby) Parse(message *Message) {
 	switch {
 	default:
@@ -134,6 +157,8 @@ func (lobby *Lobby) Parse(message *Message) {
 	}
 }
 
+// Attempts to send the given message to the client's current chat room. If they
+// are not in a chat room, an error message is sent to the client.
 func (lobby *Lobby) SendMessage(message *Message) {
 	if message.client.chatRoom == nil {
 		message.client.outgoing <- ERROR_SEND
@@ -142,6 +167,8 @@ func (lobby *Lobby) SendMessage(message *Message) {
 	message.client.chatRoom.Broadcast(message.String())
 }
 
+// Attempts to create a chat room with the given name, provided that one does
+// not already exist.
 func (lobby *Lobby) CreateChatRoom(client *Client, name string) {
 	if lobby.chatRooms[name] != nil {
 		client.outgoing <- ERROR_CREATE
@@ -156,18 +183,8 @@ func (lobby *Lobby) CreateChatRoom(client *Client, name string) {
 	client.outgoing <- fmt.Sprintf(NOTICE_PERSONAL_CREATE, chatRoom.name)
 }
 
-func (lobby *Lobby) DeleteChatRoom(chatRoom *ChatRoom) {
-	if chatRoom.expiry.After(time.Now()) {
-		go func() {
-			time.Sleep(chatRoom.expiry.Sub(time.Now()))
-			lobby.delete <- chatRoom
-		}()
-	} else {
-		chatRoom.Delete()
-		delete(lobby.chatRooms, chatRoom.name)
-	}
-}
-
+// Attempts to add the client to the chat room with the given name, provided
+// that the chat room exists.
 func (lobby *Lobby) JoinChatRoom(client *Client, name string) {
 	if lobby.chatRooms[name] == nil {
 		client.outgoing <- ERROR_JOIN
@@ -179,6 +196,7 @@ func (lobby *Lobby) JoinChatRoom(client *Client, name string) {
 	lobby.chatRooms[name].Join(client)
 }
 
+// Removes the given client from their current chat room.
 func (lobby *Lobby) LeaveChatRoom(client *Client) {
 	if client.chatRoom == nil {
 		client.outgoing <- ERROR_LEAVE
@@ -187,6 +205,7 @@ func (lobby *Lobby) LeaveChatRoom(client *Client) {
 	client.chatRoom.Leave(client)
 }
 
+// Changes the client's name to the given name.
 func (lobby *Lobby) ChangeName(client *Client, name string) {
 	if client.chatRoom == nil {
 		client.chatRoom.Broadcast(fmt.Sprintf(NOTICE_PERSONAL_NAME, name))
@@ -196,6 +215,7 @@ func (lobby *Lobby) ChangeName(client *Client, name string) {
 	client.name = name
 }
 
+// Sends to the client the list of chat rooms currently open.
 func (lobby *Lobby) ListChatRooms(client *Client) {
 	client.outgoing <- "\n"
 	client.outgoing <- "Chat Rooms:\n"
@@ -205,6 +225,7 @@ func (lobby *Lobby) ListChatRooms(client *Client) {
 	client.outgoing <- "\n"
 }
 
+// Sends to the client the list of possible commands to the client.
 func (lobby *Lobby) Help(client *Client) {
 	client.outgoing <- "\n"
 	client.outgoing <- "Commands:\n"
@@ -218,6 +239,9 @@ func (lobby *Lobby) Help(client *Client) {
 	client.outgoing <- "\n"
 }
 
+// A ChatRoom contains the chat's name, a list of the currently connected
+// clients, a history of the messages broadcast to the users in the channel,
+// and the current time at which the ChatRoom will expire.
 type ChatRoom struct {
 	name     string
 	clients  []*Client
@@ -225,14 +249,15 @@ type ChatRoom struct {
 	expiry   time.Time
 }
 
+// Creates an empty chat room with the given name, and sets its expiry time to
+// the current time + EXPIRY_TIME.
 func NewChatRoom(name string) *ChatRoom {
-	chatRoom := &ChatRoom {
+	return &ChatRoom {
 		name:     name,
 		clients:  make([]*Client, 0),
 		messages: make([]string, 0),
 		expiry:   time.Now().Add(EXPIRY_TIME),
 	}
-	return chatRoom
 }
 
 // Adds the given Client to the ChatRoom, and sends them all messages that have
@@ -267,6 +292,8 @@ func (chatRoom *ChatRoom) Broadcast(message string) {
 	}
 }
 
+// Notifies the clients within the chat room that it is being deleted, and kicks 
+// them back into the lobby.
 func (chatRoom *ChatRoom) Delete() {
 	//notify of deletion?
 	chatRoom.Broadcast(NOTICE_ROOM_DELETE)
@@ -275,6 +302,9 @@ func (chatRoom *ChatRoom) Delete() {
 	}
 }
 
+// A client abstracts away the idea of a connection into incoming and outgoing
+// channels, and stores some information about the client's state, including
+// their current name and chat room.
 type Client struct {
 	name     string
 	chatRoom *ChatRoom
@@ -301,15 +331,22 @@ func NewClient(conn net.Conn) *Client {
 		writer:   writer,
 	}
 
+	client.Listen()
+	return client
+}
+
+// Starts two threads which read from the client's outgoing channel and write to
+// the client's socket connection, and read from the client's socket and write 
+// to the client's incoming channel.
+func (client *Client) Listen() {
 	go client.Read()
 	go client.Write()
-
-	return client
 }
 
 // Reads in strings from the Client's socket, formats them into Messages, and
 // puts them into the Client's incoming channel.
 func (client *Client) Read() {
+	defer close(client.incoming)
 	for {
 		str, err := client.reader.ReadString('\n')
 		if err != nil {
@@ -319,7 +356,6 @@ func (client *Client) Read() {
 		message := NewMessage(time.Now(), client, strings.TrimSuffix(str, "\n"))
 		client.incoming <- message
 	}
-	close(client.incoming)
 }
 
 // Reads in messages from the Client's outgoing channel, and writes them to the
@@ -339,52 +375,56 @@ func (client *Client) Write() {
 	}
 }
 
-// Closes the client's connection. Unexpected socket closes are already handled
-// by the sever, so this takes advantage of that to simplify the code and make
-// sure all the threads stop
+// Closes the client's connection. Socket closing is by error checking, so this 
+// takes advantage of that to simplify the code and make sure all the threads
+// are cleaned up.
 func (client *Client) Quit() {
 	client.conn.Close()
 }
 
+// A Message contains information about the sender, the time at which the
+// message was sent, and the text of the message. This gives a convenient way
+// of passing the necessary information about a message from the client to the 
+// lobby.
 type Message struct {
 	time   time.Time
 	client *Client 
 	text   string
 }
 
+// Creates a new message with the given time, client and text.
 func NewMessage(time time.Time, client *Client, text string) *Message {
-	message := &Message {
+	return &Message {
 		time: time,
 		client: client,
 		text: text,
 	}
-	return message
 }
 
+// Returns a string representation of the message.
 func (message *Message) String() string {
 	return fmt.Sprintf("%s - %s: %s\n", message.time.Format(time.Kitchen), message.client.name, message.text)
 }
 
+// Creates a lobby, listens for client connections, and connects them to the
+// lobby.
 func main() {
 	lobby := NewLobby()
 
-	// Listen for incoming connections.
 	listener, err := net.Listen(CONN_TYPE, CONN_PORT)
 	if err != nil {
 		fmt.Println("Error listening: ", err.Error())
 		os.Exit(1)
 	}
-		// Close the listener when the application closes.
 	defer listener.Close()
 	fmt.Println("Listening on " + CONN_PORT)
+
 	for {
-		// Listen for an incoming connection.
 		conn, err := listener.Accept()
 		if err != nil {
 			fmt.Println("Error accepting: ", err.Error())
 			continue
 		}
-		// Handle connections in a new goroutine.
 		go lobby.Join(NewClient(conn))
 	}
 }

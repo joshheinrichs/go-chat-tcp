@@ -13,6 +13,7 @@ const (
     CONN_TYPE = "tcp"
 )
 
+// Reads from the socket and outputs to the console.
 func Read(conn net.Conn) {
 	reader := bufio.NewReader(conn)
 	for {
@@ -25,6 +26,7 @@ func Read(conn net.Conn) {
 	}
 }
 
+// Reads from Stdin, and outputs to the socket.
 func Write(conn net.Conn) {
 	reader := bufio.NewReader(os.Stdin)
 	writer := bufio.NewWriter(conn)
@@ -49,6 +51,8 @@ func Write(conn net.Conn) {
 	}
 }
 
+// Starts up a read and write thread which connect to the server through the
+// a socket connection.
 func main() {
 	var wg sync.WaitGroup
 
