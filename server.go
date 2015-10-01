@@ -112,6 +112,7 @@ func (lobby *Lobby) Leave(client *Client) {
 		}
 	}
 	close(client.outgoing)
+	log.Println("Closed client's outgoing channel")
 }
 
 // Checks if the a channel has expired. If it has, the chat room is deleted. 
@@ -122,9 +123,11 @@ func (lobby *Lobby) DeleteChatRoom(chatRoom *ChatRoom) {
 			time.Sleep(chatRoom.expiry.Sub(time.Now()))
 			lobby.delete <- chatRoom
 		}()
+		log.Println("attempted to delete chat room")
 	} else {
 		chatRoom.Delete()
 		delete(lobby.chatRooms, chatRoom.name)
+		log.Println("deleted chat room")
 	}
 }
 
@@ -160,9 +163,11 @@ func (lobby *Lobby) Parse(message *Message) {
 func (lobby *Lobby) SendMessage(message *Message) {
 	if message.client.chatRoom == nil {
 		message.client.outgoing <- ERROR_SEND
+		log.Println("client tried to send message in lobby")
 		return
 	}
 	message.client.chatRoom.Broadcast(message.String())
+	log.Println("client sent message")
 }
 
 // Attempts to create a chat room with the given name, provided that one does
@@ -170,6 +175,7 @@ func (lobby *Lobby) SendMessage(message *Message) {
 func (lobby *Lobby) CreateChatRoom(client *Client, name string) {
 	if lobby.chatRooms[name] != nil {
 		client.outgoing <- ERROR_CREATE
+		log.Println("client tried to create chat room with a name already in use")
 		return
 	}
 	chatRoom := NewChatRoom(name)
@@ -179,6 +185,7 @@ func (lobby *Lobby) CreateChatRoom(client *Client, name string) {
 		lobby.delete <- chatRoom
 	}()
 	client.outgoing <- fmt.Sprintf(NOTICE_PERSONAL_CREATE, chatRoom.name)
+	log.Println("client created chat room")
 }
 
 // Attempts to add the client to the chat room with the given name, provided
@@ -186,21 +193,25 @@ func (lobby *Lobby) CreateChatRoom(client *Client, name string) {
 func (lobby *Lobby) JoinChatRoom(client *Client, name string) {
 	if lobby.chatRooms[name] == nil {
 		client.outgoing <- ERROR_JOIN
+		log.Println("client tried to join a chat room that does not exist")
 		return
 	}
 	if client.chatRoom != nil {
 		lobby.LeaveChatRoom(client)
 	}
 	lobby.chatRooms[name].Join(client)
+	log.Println("client joined chat room")
 }
 
 // Removes the given client from their current chat room.
 func (lobby *Lobby) LeaveChatRoom(client *Client) {
 	if client.chatRoom == nil {
 		client.outgoing <- ERROR_LEAVE
+		log.Println("client tried to leave the lobby")
 		return
 	}
 	client.chatRoom.Leave(client)
+	log.Println("client left chat room")
 }
 
 // Changes the client's name to the given name.
@@ -211,6 +222,7 @@ func (lobby *Lobby) ChangeName(client *Client, name string) {
 		client.chatRoom.Broadcast(fmt.Sprintf(NOTICE_ROOM_NAME, client.name, name))
 	}
 	client.name = name
+	log.Println("client changed their name")
 }
 
 // Sends to the client the list of chat rooms currently open.
@@ -221,6 +233,7 @@ func (lobby *Lobby) ListChatRooms(client *Client) {
 		client.outgoing <- fmt.Sprintf("%s\n", name)
 	}
 	client.outgoing <- "\n"
+	log.Println("client listed chat rooms")
 }
 
 // Sends to the client the list of possible commands to the client.
@@ -235,6 +248,7 @@ func (lobby *Lobby) Help(client *Client) {
 	client.outgoing <- "/name foo - changes your name to foo\n"
 	client.outgoing <- "/quit - quits the program\n"
 	client.outgoing <- "\n"
+	log.Println("client requested help")
 }
 
 // A ChatRoom contains the chat's name, a list of the currently connected
@@ -344,7 +358,6 @@ func (client *Client) Listen() {
 // Reads in strings from the Client's socket, formats them into Messages, and
 // puts them into the Client's incoming channel.
 func (client *Client) Read() {
-	defer close(client.incoming)
 	for {
 		str, err := client.reader.ReadString('\n')
 		if err != nil {
@@ -354,6 +367,8 @@ func (client *Client) Read() {
 		message := NewMessage(time.Now(), client, strings.TrimSuffix(str, "\n"))
 		client.incoming <- message
 	}
+	close(client.incoming)
+	log.Println("Closed client's incoming channel read thread")
 }
 
 // Reads in messages from the Client's outgoing channel, and writes them to the
@@ -371,6 +386,7 @@ func (client *Client) Write() {
 			break
 		}
 	}
+	log.Println("Closed client's write thread")
 }
 
 // Closes the client's connection. Socket closing is by error checking, so this 
