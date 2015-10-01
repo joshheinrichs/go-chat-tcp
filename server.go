@@ -31,11 +31,12 @@ const (
 	ERROR_LEAVE  = ERROR_PREFIX + "You cannot leave the lobby.\n"
 
 	NOTICE_PREFIX = "Notice: "
-	NOTICE_CREATE = NOTICE_PREFIX + "Created chat room \"%s\".\n"
-	NOTICE_JOIN   = NOTICE_PREFIX + "\"%s\" joined the chat room.\n"
-	NOTICE_LEAVE  = NOTICE_PREFIX + "\"%s\" left the chat room.\n"
-	NOTICE_NAME   = NOTICE_PREFIX + "\"%s\" changed their name to \"%s\".\n"
-	NOTICE_DELETE = NOTICE_PREFIX + "Chat room is inactive and being deleted.\n"
+	NOTICE_ROOM_JOIN   = NOTICE_PREFIX + "\"%s\" joined the chat room.\n"
+	NOTICE_ROOM_LEAVE  = NOTICE_PREFIX + "\"%s\" left the chat room.\n"
+	NOTICE_ROOM_NAME   = NOTICE_PREFIX + "\"%s\" changed their name to \"%s\".\n"
+	NOTICE_ROOM_DELETE = NOTICE_PREFIX + "Chat room is inactive and being deleted.\n"
+	NOTICE_PERSONAL_CREATE = NOTICE_PREFIX + "Created chat room \"%s\".\n"
+	NOTICE_PERSONAL_NAME   = NOTICE_PREFIX + "Changed name to \"\"\n"
 
 
 	EXPIRY_TIME time.Duration = 7 * 24 * time.Hour 
@@ -142,7 +143,7 @@ func (lobby *Lobby) CreateChatRoom(client *Client, name string) {
 		time.Sleep(EXPIRY_TIME)
 		lobby.delete <- chatRoom
 	}()
-	client.outgoing <- fmt.Sprintf(NOTICE_CREATE, chatRoom.name)
+	client.outgoing <- fmt.Sprintf(NOTICE_PERSONAL_CREATE, chatRoom.name)
 }
 
 func (lobby *Lobby) DeleteChatRoom(chatRoom *ChatRoom) {
@@ -177,8 +178,10 @@ func (lobby *Lobby) LeaveChatRoom(client *Client) {
 }
 
 func (lobby *Lobby) ChangeName(client *Client, name string) {
-	if client.chatRoom != nil {
-		client.chatRoom.Broadcast(fmt.Sprintf(NOTICE_NAME, client.name, name))
+	if client.chatRoom == nil {
+		client.chatRoom.Broadcast(fmt.Sprintf(NOTICE_PERSONAL_NAME, name))
+	} else {
+		client.chatRoom.Broadcast(fmt.Sprintf(NOTICE_ROOM_NAME, client.name, name))
 	}
 	client.name = name
 }
@@ -229,12 +232,12 @@ func (chatRoom *ChatRoom) Join(client *Client) {
 		client.outgoing <- message
 	}
 	chatRoom.clients = append(chatRoom.clients, client)
-	chatRoom.Broadcast(fmt.Sprintf(NOTICE_JOIN, client.name))
+	chatRoom.Broadcast(fmt.Sprintf(NOTICE_ROOM_JOIN, client.name))
 }
 
 // Removes the given Client from the ChatRoom.
 func (chatRoom *ChatRoom) Leave(client *Client) {
-	chatRoom.Broadcast(fmt.Sprintf(NOTICE_LEAVE, client.name))
+	chatRoom.Broadcast(fmt.Sprintf(NOTICE_ROOM_LEAVE, client.name))
 	for i, otherClient := range chatRoom.clients {
 		if client == otherClient {
 			chatRoom.clients = append(chatRoom.clients[:i], chatRoom.clients[i+1:]...)
@@ -255,7 +258,7 @@ func (chatRoom *ChatRoom) Broadcast(message string) {
 
 func (chatRoom *ChatRoom) Delete() {
 	//notify of deletion?
-	chatRoom.Broadcast(NOTICE_DELETE)
+	chatRoom.Broadcast(NOTICE_ROOM_DELETE)
 	for _, client := range chatRoom.clients {
 		client.chatRoom = nil
 	}
