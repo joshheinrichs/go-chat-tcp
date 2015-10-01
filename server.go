@@ -425,6 +425,6 @@ func main() {
 			log.Println("Error: ", err)
 			continue
 		}
-		go lobby.Join(NewClient(conn))
+		lobby.Join(NewClient(conn))
 	}
 }
