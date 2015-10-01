@@ -114,32 +114,32 @@ func (lobby *Lobby) Parse(message *Message) {
 	switch {
 	default:
 		lobby.SendMessage(message)
-	case strings.HasPrefix(message.Text, CMD_CREATE):
-		name := strings.TrimSuffix(strings.TrimPrefix(message.Text, CMD_CREATE + " "), "\n")
-		lobby.CreateChatRoom(message.Client, name)
-	case strings.HasPrefix(message.Text, CMD_LIST):
-		lobby.ListChatRooms(message.Client)
-	case strings.HasPrefix(message.Text, CMD_JOIN):
-		name := strings.TrimSuffix(strings.TrimPrefix(message.Text, CMD_JOIN + " "), "\n")
-		lobby.JoinChatRoom(message.Client, name)
-	case strings.HasPrefix(message.Text, CMD_LEAVE):
-		lobby.LeaveChatRoom(message.Client)
-	case strings.HasPrefix(message.Text, CMD_NAME):
-		name := strings.TrimSuffix(strings.TrimPrefix(message.Text, CMD_NAME + " "), "\n")
-		lobby.ChangeName(message.Client, name)
-	case strings.HasPrefix(message.Text, CMD_HELP):
-		lobby.Help(message.Client)
-	case strings.HasPrefix(message.Text, CMD_QUIT):
-		message.Client.Quit()
+	case strings.HasPrefix(message.text, CMD_CREATE):
+		name := strings.TrimSuffix(strings.TrimPrefix(message.text, CMD_CREATE + " "), "\n")
+		lobby.CreateChatRoom(message.client, name)
+	case strings.HasPrefix(message.text, CMD_LIST):
+		lobby.ListChatRooms(message.client)
+	case strings.HasPrefix(message.text, CMD_JOIN):
+		name := strings.TrimSuffix(strings.TrimPrefix(message.text, CMD_JOIN + " "), "\n")
+		lobby.JoinChatRoom(message.client, name)
+	case strings.HasPrefix(message.text, CMD_LEAVE):
+		lobby.LeaveChatRoom(message.client)
+	case strings.HasPrefix(message.text, CMD_NAME):
+		name := strings.TrimSuffix(strings.TrimPrefix(message.text, CMD_NAME + " "), "\n")
+		lobby.ChangeName(message.client, name)
+	case strings.HasPrefix(message.text, CMD_HELP):
+		lobby.Help(message.client)
+	case strings.HasPrefix(message.text, CMD_QUIT):
+		message.client.Quit()
 	}
 }
 
 func (lobby *Lobby) SendMessage(message *Message) {
-	if message.Client.chatRoom == nil {
-		message.Client.outgoing <- ERROR_SEND
+	if message.client.chatRoom == nil {
+		message.client.outgoing <- ERROR_SEND
 		return
 	}
-	message.Client.chatRoom.Broadcast(message.String())
+	message.client.chatRoom.Broadcast(message.String())
 }
 
 func (lobby *Lobby) CreateChatRoom(client *Client, name string) {
@@ -347,22 +347,22 @@ func (client *Client) Quit() {
 }
 
 type Message struct {
-	Time   time.Time
-	Client *Client 
-	Text   string
+	time   time.Time
+	client *Client 
+	text   string
 }
 
 func NewMessage(time time.Time, client *Client, text string) *Message {
 	message := &Message {
-		Time: time,
-		Client: client,
-		Text: text,
+		time: time,
+		client: client,
+		text: text,
 	}
 	return message
 }
 
 func (message *Message) String() string {
-	return fmt.Sprintf("%s - %s: %s\n", message.Time.Format(time.Kitchen), message.Client.name, message.Text)
+	return fmt.Sprintf("%s - %s: %s\n", message.time.Format(time.Kitchen), message.client.name, message.text)
 }
 
 func main() {
