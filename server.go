@@ -26,10 +26,12 @@ const (
 	SERVER_NAME = "Server"
 
 	ERROR_PREFIX = "Error: "
-	ERROR_SEND   = ERROR_PREFIX + "You cannot send messages in the lobby"
-	ERROR_CREATE = ERROR_PREFIX + "A chat room with that name already exists."
-	ERROR_JOIN   = ERROR_PREFIX + "A chat room with that name does not exist."
-	ERROR_LEAVE  = ERROR_PREFIX + "You cannot leave the lobby."
+	ERROR_SEND   = ERROR_PREFIX + "You cannot send messages in the lobby.\n"
+	ERROR_CREATE = ERROR_PREFIX + "A chat room with that name already exists.\n"
+	ERROR_JOIN   = ERROR_PREFIX + "A chat room with that name does not exist.\n"
+	ERROR_LEAVE  = ERROR_PREFIX + "You cannot leave the lobby.\n"
+
+	EXPIRY_TIME time.Duration = 7 * 24 * time.Hour 
 )
 
 var serverClient *Client = &Client {
@@ -69,7 +71,7 @@ func (lobby *Lobby) Listen() {
 			case client := <-lobby.join:
 				lobby.Join(client)
 			case chatRoom := <-lobby.delete:
-				lobby.RemoveChatRoom(chatRoom)
+				lobby.DeleteChatRoom(chatRoom)
 			}
 		}
 	}()
@@ -148,16 +150,17 @@ func (lobby *Lobby) CreateChatRoom(chatRoom *ChatRoom) error {
 	}
 	lobby.chatRooms[chatRoom.name] = chatRoom
 	go func() {
-		time.Sleep(time.Now().AddDate(0, 0, 7).Sub(time.Now()))
+		time.Sleep(EXPIRY_TIME)
 		lobby.delete <- chatRoom
 	}()
 	return nil
 }
 
-func (lobby *Lobby) RemoveChatRoom(chatRoom *ChatRoom) {
+func (lobby *Lobby) DeleteChatRoom(chatRoom *ChatRoom) {
 	if chatRoom.expiry.After(time.Now()) {
 		go func() {
 			time.Sleep(chatRoom.expiry.Sub(time.Now()))
+			lobby.delete <- chatRoom
 		}()
 	} else {
 		chatRoom.Delete()
@@ -206,7 +209,7 @@ func NewChatRoom(name string) *ChatRoom {
 		name:     name,
 		clients:  make([]*Client, 0),
 		messages: make([]string, 0),
-		expiry:   time.Now().AddDate(0, 0, 7),
+		expiry:   time.Now().Add(EXPIRY_TIME),
 	}
 	return chatRoom
 }
@@ -234,7 +237,7 @@ func (chatRoom *ChatRoom) Leave(client *Client) {
 
 // Sends the given message to all Clients currently in the ChatRoom.
 func (chatRoom *ChatRoom) Broadcast(message string) {
-	chatRoom.expiry = time.Now()
+	chatRoom.expiry = time.Now().Add(EXPIRY_TIME)
 	chatRoom.messages = append(chatRoom.messages, message)
 	for _, client := range chatRoom.clients {
 		client.outgoing <- message
@@ -243,6 +246,7 @@ func (chatRoom *ChatRoom) Broadcast(message string) {
 
 func (chatRoom *ChatRoom) Delete() {
 	//notify of deletion?
+	chatRoom.Broadcast("Chat room is inactive and is being closed.\n")
 	for _, client := range chatRoom.clients {
 		client.chatRoom = nil
 	}
