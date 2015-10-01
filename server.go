@@ -20,6 +20,7 @@ const (
 	CMD_LEAVE  = CMD_PREFIX + "leave"
 	CMD_HELP   = CMD_PREFIX + "help"
 	CMD_NAME   = CMD_PREFIX + "name"
+	CMD_QUIT   = CMD_PREFIX + "quit"
 
 	CLIENT_NAME = "Anonymous"
 	SERVER_NAME = "Server"
@@ -55,6 +56,7 @@ type Lobby struct {
 	chatRooms   map[string]*ChatRoom
 	incoming    chan *Message
 	join        chan *Client
+	leave       chan *Client
 	delete      chan *ChatRoom
 }
 
@@ -64,6 +66,7 @@ func NewLobby() *Lobby {
 		chatRooms: make(map[string]*ChatRoom),
 		incoming:  make(chan *Message),
 		join:      make(chan *Client),
+		leave:     make(chan *Client),
 		delete:    make(chan *ChatRoom),
 	}
 	lobby.Listen()
@@ -78,6 +81,8 @@ func (lobby *Lobby) Listen() {
 				lobby.Parse(message)
 			case client := <-lobby.join:
 				lobby.Join(client)
+			case client := <-lobby.leave:
+				lobby.Leave(client)
 			case chatRoom := <-lobby.delete:
 				lobby.DeleteChatRoom(chatRoom)
 			}
@@ -91,7 +96,8 @@ func (lobby *Lobby) Join(client *Client) {
 		for {
 			message, ok := <-client.incoming
 			if !ok {
-				//signal to leave channel
+				lobby.leave <- client
+				break
 			}
 			lobby.incoming <- message
 		} 
@@ -99,7 +105,16 @@ func (lobby *Lobby) Join(client *Client) {
 }
 
 func (lobby *Lobby) Leave(client *Client) {
-	//todo
+	if client.chatRoom != nil {
+		client.chatRoom.Leave(client)
+	}
+	for i, otherClient := range lobby.clients {
+		if client == otherClient {
+			lobby.clients = append(lobby.clients[:i], lobby.clients[i+1:]...)
+			break
+		}
+	}
+	fmt.Println("later...")
 }
 
 func (lobby *Lobby) Parse(message *Message) {
@@ -121,6 +136,8 @@ func (lobby *Lobby) Parse(message *Message) {
 		lobby.ChangeName(message.Client, name)
 	case strings.HasPrefix(message.Text, CMD_HELP):
 		lobby.Help(message.Client)
+	case strings.HasPrefix(message.Text, CMD_QUIT):
+		message.Client.Quit()
 	}
 }
 
@@ -204,6 +221,7 @@ func (lobby *Lobby) Help(client *Client) {
 	client.outgoing <- "/join foo - joins a chat room named foo\n"
 	client.outgoing <- "/leave - leaves the current chat room\n"
 	client.outgoing <- "/name foo - changes your name to foo\n"
+	client.outgoing <- "/quit - quits the program\n"
 	client.outgoing <- "\n"
 }
 
@@ -269,6 +287,7 @@ type Client struct {
 	chatRoom *ChatRoom
 	incoming chan *Message
 	outgoing chan string
+	conn     net.Conn
 	reader   *bufio.Reader
 	writer   *bufio.Writer
 }
@@ -280,12 +299,13 @@ func NewClient(conn net.Conn) *Client {
 	reader := bufio.NewReader(conn)
 
 	client := &Client {
-		name: CLIENT_NAME,
+		name:     CLIENT_NAME,
 		chatRoom: nil,
 		incoming: make(chan *Message),
 		outgoing: make(chan string),
-		reader: reader,
-		writer: writer,
+		conn:     conn,
+		reader:   reader,
+		writer:   writer,
 	}
 
 	go client.Read()
@@ -300,21 +320,37 @@ func (client *Client) Read() {
 	for {
 		str, err := client.reader.ReadString('\n')
 		if err != nil {
-			fmt.Print(err)
+			fmt.Println(err)
 			break
 		}
 		message := NewMessage(time.Now(), client, strings.TrimSuffix(str, "\n"))
 		client.incoming <- message
 	}
+	close(client.incoming)
 }
 
 // Reads in messages from the Client's outgoing channel, and writes them to the
 // Client's socket.
 func (client *Client) Write() {
 	for str := range client.outgoing {
-		client.writer.WriteString(str)
-		client.writer.Flush()
+		_, err := client.writer.WriteString(str)
+		if err != nil {
+			fmt.Println(err)
+			break
+		}
+		err = client.writer.Flush()
+		if err != nil {
+			fmt.Println(err)
+			break
+		}
 	}
+}
+
+// Closes the client's connection. Unexpected socket closes are already handled
+// by the sever, so this takes advantage of that to simplify the code and make
+// sure all the threads stop
+func (client *Client) Quit() {
+	client.conn.Close()
 }
 
 type Message struct {
