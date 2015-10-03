@@ -11,7 +11,11 @@ import (
 const (
     CONN_PORT = ":3333"
     CONN_TYPE = "tcp"
+
+    MSG_DISCONNECT = "Disconnected from the server.\n"
 )
+
+var wg sync.WaitGroup
 
 // Reads from the socket and outputs to the console.
 func Read(conn net.Conn) {
@@ -19,8 +23,9 @@ func Read(conn net.Conn) {
 	for {
 		str, err := reader.ReadString('\n')
 		if err != nil {
-			fmt.Println(err)
-			os.Exit(1)
+			fmt.Printf(MSG_DISCONNECT)
+			wg.Done()
+			return
 		}
 		fmt.Print(str)
 	}
@@ -54,14 +59,12 @@ func Write(conn net.Conn) {
 // Starts up a read and write thread which connect to the server through the
 // a socket connection.
 func main() {
-	var wg sync.WaitGroup
+	wg.Add(1)
 
 	conn, err := net.Dial(CONN_TYPE, CONN_PORT)
 	if err != nil {
 		fmt.Println(err)
 	}
-
-	wg.Add(2)
 
 	go Read(conn)
 	go Write(conn)
