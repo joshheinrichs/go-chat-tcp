@@ -1,18 +1,18 @@
 package main
 
 import (
-	"net"
 	"bufio"
 	"fmt"
+	"net"
 	"os"
 	"sync"
 )
 
 const (
-    CONN_PORT = ":3333"
-    CONN_TYPE = "tcp"
+	CONN_PORT = ":3333"
+	CONN_TYPE = "tcp"
 
-    MSG_DISCONNECT = "Disconnected from the server.\n"
+	MSG_DISCONNECT = "Disconnected from the server.\n"
 )
 
 var wg sync.WaitGroup

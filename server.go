@@ -1,18 +1,20 @@
 package main
 
 import (
-	"strings"
+	"bufio"
 	"fmt"
+	"log"
 	"net"
 	"os"
+	"strings"
 	"time"
-	"bufio"
-	"log"
 )
 
 const (
 	CONN_PORT = ":3333"
 	CONN_TYPE = "tcp"
+
+	MAX_CLIENTS = 10
 
 	CMD_PREFIX = "/"
 	CMD_CREATE = CMD_PREFIX + "create"
@@ -32,21 +34,22 @@ const (
 	ERROR_JOIN   = ERROR_PREFIX + "A chat room with that name does not exist.\n"
 	ERROR_LEAVE  = ERROR_PREFIX + "You cannot leave the lobby.\n"
 
-	NOTICE_PREFIX = "Notice: "
-	NOTICE_ROOM_JOIN   = NOTICE_PREFIX + "\"%s\" joined the chat room.\n"
-	NOTICE_ROOM_LEAVE  = NOTICE_PREFIX + "\"%s\" left the chat room.\n"
-	NOTICE_ROOM_NAME   = NOTICE_PREFIX + "\"%s\" changed their name to \"%s\".\n"
-	NOTICE_ROOM_DELETE = NOTICE_PREFIX + "Chat room is inactive and being deleted.\n"
+	NOTICE_PREFIX          = "Notice: "
+	NOTICE_ROOM_JOIN       = NOTICE_PREFIX + "\"%s\" joined the chat room.\n"
+	NOTICE_ROOM_LEAVE      = NOTICE_PREFIX + "\"%s\" left the chat room.\n"
+	NOTICE_ROOM_NAME       = NOTICE_PREFIX + "\"%s\" changed their name to \"%s\".\n"
+	NOTICE_ROOM_DELETE     = NOTICE_PREFIX + "Chat room is inactive and being deleted.\n"
 	NOTICE_PERSONAL_CREATE = NOTICE_PREFIX + "Created chat room \"%s\".\n"
 	NOTICE_PERSONAL_NAME   = NOTICE_PREFIX + "Changed name to \"\".\n"
 
 	MSG_CONNECT = "Welcome to the server! Type \"/help\" to get a list of commands.\n"
+	MSG_FULL    = "Server is full. Please try reconnecting later."
 
-	EXPIRY_TIME time.Duration = 7 * 24 * time.Hour 
+	EXPIRY_TIME time.Duration = 7 * 24 * time.Hour
 )
 
 // A Lobby receives messages on its channels, and keeps track of the currently
-// connected clients, and currently created chat rooms. 
+// connected clients, and currently created chat rooms.
 type Lobby struct {
 	clients   []*Client
 	chatRooms map[string]*ChatRoom
@@ -58,7 +61,7 @@ type Lobby struct {
 
 // Creates a lobby which beings listening over its channels.
 func NewLobby() *Lobby {
-	lobby := &Lobby {
+	lobby := &Lobby{
 		clients:   make([]*Client, 0),
 		chatRooms: make(map[string]*ChatRoom),
 		incoming:  make(chan *Message),
@@ -90,6 +93,10 @@ func (lobby *Lobby) Listen() {
 
 // Handles clients connecting to the lobby
 func (lobby *Lobby) Join(client *Client) {
+	if len(lobby.clients) >= MAX_CLIENTS {
+		client.Quit()
+		return
+	}
 	lobby.clients = append(lobby.clients, client)
 	client.outgoing <- MSG_CONNECT
 	go func() {
@@ -115,7 +122,7 @@ func (lobby *Lobby) Leave(client *Client) {
 	log.Println("Closed client's outgoing channel")
 }
 
-// Checks if the a channel has expired. If it has, the chat room is deleted. 
+// Checks if the a channel has expired. If it has, the chat room is deleted.
 // Otherwise, a signal is sent to the delete channel at its new expiry time.
 func (lobby *Lobby) DeleteChatRoom(chatRoom *ChatRoom) {
 	if chatRoom.expiry.After(time.Now()) {
@@ -139,17 +146,17 @@ func (lobby *Lobby) Parse(message *Message) {
 	default:
 		lobby.SendMessage(message)
 	case strings.HasPrefix(message.text, CMD_CREATE):
-		name := strings.TrimSuffix(strings.TrimPrefix(message.text, CMD_CREATE + " "), "\n")
+		name := strings.TrimSuffix(strings.TrimPrefix(message.text, CMD_CREATE+" "), "\n")
 		lobby.CreateChatRoom(message.client, name)
 	case strings.HasPrefix(message.text, CMD_LIST):
 		lobby.ListChatRooms(message.client)
 	case strings.HasPrefix(message.text, CMD_JOIN):
-		name := strings.TrimSuffix(strings.TrimPrefix(message.text, CMD_JOIN + " "), "\n")
+		name := strings.TrimSuffix(strings.TrimPrefix(message.text, CMD_JOIN+" "), "\n")
 		lobby.JoinChatRoom(message.client, name)
 	case strings.HasPrefix(message.text, CMD_LEAVE):
 		lobby.LeaveChatRoom(message.client)
 	case strings.HasPrefix(message.text, CMD_NAME):
-		name := strings.TrimSuffix(strings.TrimPrefix(message.text, CMD_NAME + " "), "\n")
+		name := strings.TrimSuffix(strings.TrimPrefix(message.text, CMD_NAME+" "), "\n")
 		lobby.ChangeName(message.client, name)
 	case strings.HasPrefix(message.text, CMD_HELP):
 		lobby.Help(message.client)
@@ -264,7 +271,7 @@ type ChatRoom struct {
 // Creates an empty chat room with the given name, and sets its expiry time to
 // the current time + EXPIRY_TIME.
 func NewChatRoom(name string) *ChatRoom {
-	return &ChatRoom {
+	return &ChatRoom{
 		name:     name,
 		clients:  make([]*Client, 0),
 		messages: make([]string, 0),
@@ -275,7 +282,7 @@ func NewChatRoom(name string) *ChatRoom {
 // Adds the given Client to the ChatRoom, and sends them all messages that have
 // that have been sent since the creation of the ChatRoom.
 func (chatRoom *ChatRoom) Join(client *Client) {
-	client.chatRoom = chatRoom;
+	client.chatRoom = chatRoom
 	for _, message := range chatRoom.messages {
 		client.outgoing <- message
 	}
@@ -304,7 +311,7 @@ func (chatRoom *ChatRoom) Broadcast(message string) {
 	}
 }
 
-// Notifies the clients within the chat room that it is being deleted, and kicks 
+// Notifies the clients within the chat room that it is being deleted, and kicks
 // them back into the lobby.
 func (chatRoom *ChatRoom) Delete() {
 	//notify of deletion?
@@ -333,7 +340,7 @@ func NewClient(conn net.Conn) *Client {
 	writer := bufio.NewWriter(conn)
 	reader := bufio.NewReader(conn)
 
-	client := &Client {
+	client := &Client{
 		name:     CLIENT_NAME,
 		chatRoom: nil,
 		incoming: make(chan *Message),
@@ -348,7 +355,7 @@ func NewClient(conn net.Conn) *Client {
 }
 
 // Starts two threads which read from the client's outgoing channel and write to
-// the client's socket connection, and read from the client's socket and write 
+// the client's socket connection, and read from the client's socket and write
 // to the client's incoming channel.
 func (client *Client) Listen() {
 	go client.Read()
@@ -389,7 +396,7 @@ func (client *Client) Write() {
 	log.Println("Closed client's write thread")
 }
 
-// Closes the client's connection. Socket closing is by error checking, so this 
+// Closes the client's connection. Socket closing is by error checking, so this
 // takes advantage of that to simplify the code and make sure all the threads
 // are cleaned up.
 func (client *Client) Quit() {
@@ -398,20 +405,20 @@ func (client *Client) Quit() {
 
 // A Message contains information about the sender, the time at which the
 // message was sent, and the text of the message. This gives a convenient way
-// of passing the necessary information about a message from the client to the 
+// of passing the necessary information about a message from the client to the
 // lobby.
 type Message struct {
 	time   time.Time
-	client *Client 
+	client *Client
 	text   string
 }
 
 // Creates a new message with the given time, client and text.
 func NewMessage(time time.Time, client *Client, text string) *Message {
-	return &Message {
-		time: time,
+	return &Message{
+		time:   time,
 		client: client,
-		text: text,
+		text:   text,
 	}
 }
 
