@@ -224,7 +224,7 @@ func (lobby *Lobby) LeaveChatRoom(client *Client) {
 // Changes the client's name to the given name.
 func (lobby *Lobby) ChangeName(client *Client, name string) {
 	if client.chatRoom == nil {
-		client.chatRoom.Broadcast(fmt.Sprintf(NOTICE_PERSONAL_NAME, name))
+		client.outgoing <- fmt.Sprintf(NOTICE_PERSONAL_NAME, name)
 	} else {
 		client.chatRoom.Broadcast(fmt.Sprintf(NOTICE_ROOM_NAME, client.name, name))
 	}
